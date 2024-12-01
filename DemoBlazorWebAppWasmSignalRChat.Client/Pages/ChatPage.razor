@@ -1,0 +1,103 @@
+﻿@page "/chat"
+@using Microsoft.AspNetCore.SignalR.Client
+@rendermode InteractiveWebAssembly
+
+@inject NavigationManager NavManager
+<PageTitle>Netcode-Hub Chat</PageTitle>
+
+<div class="row">
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header">Netcode-Hub chat</div>
+            <div class="card-body">
+                <ul class="list-group">
+                    @foreach (var message in Messages)
+                    {
+                        <li class="mb-2">@message</li>
+                    }
+                </ul>
+                <div class="border-primary">
+                    <div class="hstack gap-2 mb-4">
+                        <input type="text" class="form-control w-25" placeholder="name" @bind="userName" />
+                        <textarea class="form-control" placeholder="Enter your message" @bind="Message"></textarea>
+                    </div>
+                    <button class="btn btn-success" @onclick="Send">Send Message</button>
+                </div>
+            </div>
+            <div class="card-footer">
+                @if (!IsConnected)
+                {
+                    <div class="alert alert-danger">Chat Disconnected</div>
+                }
+                else
+                {
+                    <div class="alert alert-success">Chat Connected</div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+    private HubConnection? hubConnection;
+    private List<string> Messages = new List<string>();
+    private string? userName;
+    private string? Message;
+    private DateTime Date = DateTime.Now;
+
+    public ChatPage()
+    {
+    }
+
+    protected async override Task OnInitializedAsync()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl($"{NavManager.BaseUri}chathub")
+            .Build();
+
+        hubConnection.On<string, string, DateTime>("ReceiveMessage", (userName, message, date) =>
+        {
+            Console.WriteLine($"Message received: {userName} - {message} - {date}");
+            var concatMessage = $"{date:G}{Environment.NewLine}{userName}:{Environment.NewLine}{message}";
+            Messages.Add(concatMessage);
+            InvokeAsync(() => StateHasChanged());
+        });
+        
+        try
+        {
+            await hubConnection.StartAsync();
+            Console.WriteLine("SignalR Connected!");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error starting SignalR connection: {ex.Message}");
+        }
+    }
+
+    private bool IsConnected => hubConnection?.State == HubConnectionState.Connected;
+
+    private async Task Send()
+    {
+        if (hubConnection != null)
+        {
+            try
+            {
+                Console.WriteLine($"Attempting to send message: Username = {userName}, Message = {Message}, Date = {Date}");
+                await hubConnection.SendAsync("SendMessage", userName, Message, Date);
+                Console.WriteLine("Message sent successfully.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error while sending message: {ex.Message}");
+            }
+        }
+        else
+        {
+            Console.WriteLine("Error: HubConnection is null.");
+        }
+    }
+}
+
+
